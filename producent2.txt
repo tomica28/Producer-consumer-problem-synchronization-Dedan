@@ -1,0 +1,67 @@
+const N = 5;
+
+
+server sem_bin {
+	var state : {up, down};
+	
+	{ wait | state = :up } -> { state = :down }
+	{ signal } -> { state = :up }
+}
+
+server sem {
+	var value: 0..N;
+	
+	{ signal | value < N } -> { value = value + 1; return :ok; }
+	{ signal | value == N } -> { return :ok;}
+	{ wait | value > 0 } -> { value = value - 1; return :ok; }
+}
+
+server bufor {
+	var head: 0..N;
+	var tail: 0..N;
+	var lenght: 0..N;
+	
+	{ put | lenght < N } -> { lenght = lenght + 1; tail = (tail + 1) % N; }
+	{ get | lenght > 0 } -> { lenght = lenght - 1; head = (head - 1) % N; }
+}
+
+var buf = bufor() { head = 0, tail = 0, lenght = 0 };
+var mutex = sem_bin() { state = :up };
+var full = sem() { value = N };
+var empty = sem() { value = 0 };
+
+process consumer() {
+	loop {
+		empty.wait();
+		mutex.wait();
+		-- sekcja krytyczna
+		buf.get();
+		
+		full.signal();
+		mutex.signal();
+	}
+}
+
+process producer1() {
+	loop {
+		full.wait();
+		mutex.wait();
+		-- sekcja krytyczna
+		buf.put();
+		
+		empty.signal();
+		mutex.signal();
+	}
+}
+
+process producer2() {
+	loop {
+		full.wait();
+		mutex.wait();
+		-- sekcja krytyczna
+		buf.put();
+		
+		empty.signal();
+		mutex.signal();
+	}
+}
